@@ -22,7 +22,7 @@ FT_ADJ        = 0.3949
 DAY_TH = {"อา": 6, "จ": 0, "อ": 1, "พ": 2, "พฤ": 3, "ศ": 4, "ส": 5}
 
 def parse_date_col(raw: str):
-    match = re.match(r"(\d{2}/\d{2})\n\((.+)\)", raw)
+    match = re.match(r"(\d{2}/\d{2})\s*\((.+?)\)", raw)
     if not match:
         return None, None
     date_str, th_day = match.group(1), match.group(2)
@@ -52,6 +52,8 @@ def load_data_from_gsheet():
         if row_str.str.contains(r"\d{2}/\d{2}", regex=True).any():
             header_row = r
             break
+    # data_start_row = แถวหลัง header 2 แถว (header=วันที่, header+1=On/Off/Total label)
+    data_start_row = header_row + 2
 
     data_start_row = header_row + 2  # ข้อมูลเริ่ม 2 แถวหลัง header
 
@@ -66,11 +68,6 @@ def load_data_from_gsheet():
 
     if not date_cols:
         st.error("❌ ไม่พบคอลัมน์วันที่ในข้อมูล กรุณาตรวจสอบรูปแบบ Google Sheet")
-        st.warning(f"🔍 Debug: {raw.shape[0]} แถว, {raw.shape[1]} คอลัมน์ | header_row = {header_row}")
-        st.write("**5 แถวแรก คอลัมน์ 0-9:**")
-        st.dataframe(raw.iloc[:5, :10].astype(str))
-        st.write("**แถว header คอลัมน์ 4-15:**")
-        st.dataframe(raw.iloc[header_row:header_row+2, 4:16].astype(str))
         st.stop()
 
     records = []
