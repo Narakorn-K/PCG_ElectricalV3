@@ -332,28 +332,76 @@ on_vals  = [agg_prev["on_peak"]  if agg_prev is not None else 0, agg_cur["on_pea
 off_vals = [agg_prev["off_peak"] if agg_prev is not None else 0, agg_cur["off_peak"]]
 x_labels = [label_prev, label_cur]
 
+# Compute % splits per bar for inside labels
+tot_vals     = [on_vals[i] + off_vals[i] for i in range(2)]
+on_pct_bars  = [on_vals[i]  / tot_vals[i] * 100 if tot_vals[i] else 0 for i in range(2)]
+off_pct_bars = [off_vals[i] / tot_vals[i] * 100 if tot_vals[i] else 0 for i in range(2)]
+
 fig_w = go.Figure()
 fig_w.add_trace(go.Bar(
     name="On Peak", x=x_labels, y=on_vals, marker_color="#e65100",
-    text=[f"{v:,.0f}" for v in on_vals], textposition="outside",
+    text=[f"{v:,.0f} kWh  ({on_pct_bars[i]:.0f}%)" for i, v in enumerate(on_vals)],
+    textposition="inside", insidetextanchor="middle",
+    textfont=dict(color="white", size=12),
 ))
 fig_w.add_trace(go.Bar(
     name="Off Peak", x=x_labels, y=off_vals, marker_color="#1565c0",
-    text=[f"{v:,.0f}" for v in off_vals], textposition="outside",
+    text=[f"{v:,.0f} kWh  ({off_pct_bars[i]:.0f}%)" for i, v in enumerate(off_vals)],
+    textposition="inside", insidetextanchor="middle",
+    textfont=dict(color="white", size=12),
 ))
+# Total label on top of each bar
+for xl, tv in zip(x_labels, tot_vals):
+    fig_w.add_annotation(
+        x=xl, y=tv, text=f"<b>{tv:,.0f} kWh</b>",
+        showarrow=False, yshift=12,
+        font=dict(size=12, color="#1a237e"),
+    )
 fig_w.update_layout(
-    barmode="group", height=360,
+    barmode="stack", height=400,
     yaxis_title="kWh",
     title_text=f"On Peak vs Off Peak — {dept_sel}",
     title_font_size=13,
     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-    margin=dict(t=50, b=20, l=20, r=20),
+    margin=dict(t=50, b=20, l=20, r=60),
     plot_bgcolor="white", paper_bgcolor="white",
 )
 fig_w.update_yaxes(gridcolor="#f0f0f0")
 
 with col_g:
     st.plotly_chart(fig_w, use_container_width=True)
+
+# ── Summary text block below chart ───────────────────────────────────────────
+cur_total_w  = agg_cur["on_peak"]  + agg_cur["off_peak"]
+prev_total_w = (agg_prev["on_peak"] + agg_prev["off_peak"]) if agg_prev is not None else 0
+diff_w       = cur_total_w - prev_total_w
+pct_w        = (diff_w / prev_total_w * 100) if prev_total_w else 0
+cur_on_pct   = agg_cur["on_peak"]  / cur_total_w * 100 if cur_total_w else 0
+cur_off_pct  = agg_cur["off_peak"] / cur_total_w * 100 if cur_total_w else 0
+
+direction   = "เพิ่มขึ้น" if diff_w >= 0 else "ลดลง"
+dir_color   = "#e53935"   if diff_w >= 0 else "#43a047"
+dir_icon    = "▲"         if diff_w >= 0 else "▼"
+summary_dept = dept_sel if dept_sel != "🏭 Factory (ทั้งหมด)" else "ทั้งโรงงาน"
+prev_wk_txt  = f"เทียบกับสัปดาห์ก่อน {prev_total_w:,.0f} kWh" if prev_yw else ""
+
+st.markdown(f"""
+<div style="background:#f8f9ff;border-left:4px solid #1565c0;border-radius:8px;
+            padding:14px 22px;margin-top:4px;font-size:14px;line-height:2.0;color:#333;">
+  📋 <b>สรุปการใช้ไฟฟ้า &mdash; {summary_dept} &nbsp;|&nbsp; {sel_label}</b><br>
+  สัปดาห์นี้ใช้ไฟฟ้ารวมทั้งสิ้น <b>{cur_total_w:,.0f} kWh</b><br>
+  &nbsp;&nbsp;&nbsp;
+  <span style="color:#e65100;font-weight:600;">● On Peak</span>&nbsp;&nbsp;
+  <b>{agg_cur["on_peak"]:,.0f} kWh</b>
+  &nbsp;<span style="color:#888;">({cur_on_pct:.1f}%)</span>
+  &emsp;
+  <span style="color:#1565c0;font-weight:600;">● Off Peak</span>&nbsp;
+  <b>{agg_cur["off_peak"]:,.0f} kWh</b>
+  &nbsp;<span style="color:#888;">({cur_off_pct:.1f}%)</span><br>
+  {prev_wk_txt} &nbsp;→&nbsp;
+  <span style="color:{dir_color};font-weight:700;">{dir_icon} {direction} {abs(diff_w):,.0f} kWh &nbsp;({abs(pct_w):.1f}%)</span>
+</div>
+""", unsafe_allow_html=True)
 
 # ─── Section 3: Department Breakdown ──────────────────────────────────────────
 st.markdown('<div class="section-header">🏭 Department Usage Breakdown</div>', unsafe_allow_html=True)
