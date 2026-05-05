@@ -342,26 +342,26 @@ fig_w.add_trace(go.Bar(
     name="On Peak", x=x_labels, y=on_vals, marker_color="#e65100",
     text=[f"{v:,.0f} kWh  ({on_pct_bars[i]:.0f}%)" for i, v in enumerate(on_vals)],
     textposition="inside", insidetextanchor="middle",
-    textfont=dict(color="white", size=12),
+    textfont=dict(color="white", size=16),
 ))
 fig_w.add_trace(go.Bar(
     name="Off Peak", x=x_labels, y=off_vals, marker_color="#1565c0",
     text=[f"{v:,.0f} kWh  ({off_pct_bars[i]:.0f}%)" for i, v in enumerate(off_vals)],
     textposition="inside", insidetextanchor="middle",
-    textfont=dict(color="white", size=12),
+    textfont=dict(color="white", size=16),
 ))
 # Total label on top of each bar
 for xl, tv in zip(x_labels, tot_vals):
     fig_w.add_annotation(
         x=xl, y=tv, text=f"<b>{tv:,.0f} kWh</b>",
-        showarrow=False, yshift=12,
-        font=dict(size=12, color="#1a237e"),
+        showarrow=False, yshift=16,
+        font=dict(size=16, color="#1a237e"),
     )
 fig_w.update_layout(
     barmode="stack", height=400,
     yaxis_title="kWh",
     title_text=f"On Peak vs Off Peak — {dept_sel}",
-    title_font_size=13,
+    title_font_size=16,
     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
     margin=dict(t=50, b=20, l=20, r=60),
     plot_bgcolor="white", paper_bgcolor="white",
