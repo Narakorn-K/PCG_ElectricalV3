@@ -3,13 +3,13 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 
 st.set_page_config(page_title="Electricity Usage Overview", layout="wide")
 
 # ─── Google Sheet Config ──────────────────────────────────────────────────────
 SHEET_ID   = "1Ym2yfzkLTyLTtJtLZSSgWoeew_IPWUaI_u6d45jKUnw"
-SHEET_NAME = "Clean Data"
+SHEET_NAME = "Daily"
 from urllib.parse import quote
 EXPORT_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=xlsx&sheet={quote(SHEET_NAME)}"
 
@@ -18,26 +18,47 @@ ON_PEAK_RATE  = 4.1824
 OFF_PEAK_RATE = 2.6369
 FT_ADJ        = 0.3949
 
-# ─── Helpers ──────────────────────────────────────────────────────────────────
+# ─── Thai day abbreviation → weekday number ───────────────────────────────────
 DAY_TH = {"อา": 6, "จ": 0, "อ": 1, "พ": 2, "พฤ": 3, "ศ": 4, "ส": 5}
 
-def parse_date_col(raw: str):
-    match = re.match(r"(\d{2}/\d{2})\s*\((.+?)\)", raw)
+# ─── Helpers ──────────────────────────────────────────────────────────────────
+def parse_date_col(raw_val: str, fallback_year: int = 2026):
+    """Parse date cell like '01/03\\n(อา)' or '01/03\\n(จ)'.
+    Returns (datetime, weekday_int) or (None, None).
+    """
+    match = re.match(r"(\d{2}/\d{2})", str(raw_val))
     if not match:
         return None, None
-    date_str, th_day = match.group(1), match.group(2)
+    date_str = match.group(1)
     d, m = map(int, date_str.split("/"))
-    year = datetime.now().year
-    if m > datetime.now().month + 1:
-        year -= 1
-    try:
-        dt = datetime(year, m, d)
-    except ValueError:
-        return None, None
-    return dt, DAY_TH.get(th_day, dt.weekday())
+
+    # Try current year first; if that fails try fallback_year
+    for yr in [fallback_year, fallback_year - 1, datetime.now().year]:
+        try:
+            dt = datetime(yr, m, d)
+            # Detect Thai day abbrev if present
+            day_match = re.search(r"\((.+?)\)", str(raw_val))
+            wd = DAY_TH.get(day_match.group(1), dt.weekday()) if day_match else dt.weekday()
+            return dt, wd
+        except ValueError:
+            continue
+    return None, None
 
 
-@st.cache_data(ttl=300)  # Cache 5 นาที แล้ว auto-refresh
+def week_label(year_week: str, df: pd.DataFrame) -> str:
+    """Convert '2026-W13' to '23 Mar – 29 Mar 2026'."""
+    sub = df[df["year_week"] == year_week]["date"]
+    if sub.empty:
+        return year_week
+    start = sub.min()
+    end   = sub.max()
+    if start.month == end.month:
+        return f"{start.day} – {end.strftime('%-d %b %Y')}"
+    else:
+        return f"{start.strftime('%-d %b')} – {end.strftime('%-d %b %Y')}"
+
+
+@st.cache_data(ttl=300)
 def load_data_from_gsheet():
     try:
         raw = pd.read_excel(EXPORT_URL, sheet_name=SHEET_NAME, header=None)
@@ -45,43 +66,47 @@ def load_data_from_gsheet():
         st.error(f"❌ ไม่สามารถดึงข้อมูลจาก Google Sheet ได้: {e}")
         st.stop()
 
-    # ── Auto-detect แถว header (หาแถวที่มีวันที่ dd/mm) ──────────────────────
+    return _parse_raw(raw)
+
+
+def _parse_raw(raw: pd.DataFrame) -> pd.DataFrame:
+    """Parse raw DataFrame (either from Google Sheet or uploaded xlsx)."""
+
+    # ── Auto-detect header row (row containing dd/mm date patterns) ─────────
     header_row = 0
     for r in range(min(6, raw.shape[0])):
-        row_str = raw.iloc[r, :].astype(str)
-        if row_str.str.contains(r"\d{2}/\d{2}", regex=True).any():
+        if raw.iloc[r, :].astype(str).str.contains(r"\d{2}/\d{2}", regex=True).any():
             header_row = r
             break
-    # data_start_row = แถวหลัง header 2 แถว (header=วันที่, header+1=On/Off/Total label)
+
     data_start_row = header_row + 2
 
-    data_start_row = header_row + 2  # ข้อมูลเริ่ม 2 แถวหลัง header
-
-    # ── Auto-detect คอลัมน์วันที่ (scan ทุก column ไม่ข้ามทีละ 3) ────────────
+    # ── Auto-detect date columns ─────────────────────────────────────────────
+    # Infer file year from today (Google Sheet may span multiple months)
+    fallback_year = datetime.now().year
     date_cols = []
     for i in range(4, raw.shape[1]):
         val = raw.iloc[header_row, i]
         if pd.notna(val):
-            dt, wd = parse_date_col(str(val))
+            dt, wd = parse_date_col(str(val), fallback_year)
             if dt:
                 date_cols.append({"col_idx": i, "date": dt, "weekday": wd})
 
     if not date_cols:
-        st.error("❌ ไม่พบคอลัมน์วันที่ในข้อมูล กรุณาตรวจสอบรูปแบบ Google Sheet")
+        st.error("❌ ไม่พบคอลัมน์วันที่ กรุณาตรวจสอบโครงสร้าง Sheet")
         st.stop()
 
     records = []
     for row_i in range(data_start_row, raw.shape[0]):
         meter  = raw.iloc[row_i, 0]
-        group  = raw.iloc[row_i, 1]
-        subgrp = raw.iloc[row_i, 2]
+        group  = raw.iloc[row_i, 2]   # Main Group (col C)
+        subgrp = raw.iloc[row_i, 3]   # Group / Sub-group (col D)
         if pd.isna(meter) or pd.isna(group):
             continue
         if str(group).strip() in ("nan", ""):
             continue
         for dc in date_cols:
             ci = dc["col_idx"]
-            # ป้องกัน index เกิน
             on  = pd.to_numeric(raw.iloc[row_i, ci],     errors="coerce") if ci     < raw.shape[1] else 0
             off = pd.to_numeric(raw.iloc[row_i, ci + 1], errors="coerce") if ci + 1 < raw.shape[1] else 0
             tot = pd.to_numeric(raw.iloc[row_i, ci + 2], errors="coerce") if ci + 2 < raw.shape[1] else 0
@@ -98,7 +123,7 @@ def load_data_from_gsheet():
 
     if not records:
         st.error("❌ ดึงข้อมูลได้แต่ไม่พบแถวข้อมูล กรุณาตรวจสอบโครงสร้าง Sheet")
-        st.dataframe(raw.iloc[:5, :8])   # แสดง 5 แถวแรกเพื่อ debug
+        st.dataframe(raw.iloc[:5, :8])
         st.stop()
 
     df = pd.DataFrame(records)
@@ -107,6 +132,11 @@ def load_data_from_gsheet():
     df["year"]      = df["date"].dt.isocalendar().year.astype(int)
     df["year_week"] = df["year"].astype(str) + "-W" + df["week_num"].astype(str).str.zfill(2)
     return df
+
+
+def get_all_weeks(df):
+    """Return all weeks sorted, with ≥1 day of data."""
+    return sorted(df["year_week"].unique().tolist())
 
 
 def get_complete_weeks(df):
@@ -131,7 +161,11 @@ st.markdown("""
 <style>
     .main-title {
         font-size:26px; font-weight:700; text-align:center;
-        color:#1a237e; margin-bottom:20px;
+        color:#1a237e; margin-bottom:4px;
+    }
+    .week-subtitle {
+        font-size:15px; text-align:center; color:#546e7a;
+        margin-bottom:20px; font-weight:500;
     }
     .kpi-card {
         background:#fff; border-radius:12px; padding:18px 22px;
@@ -152,6 +186,7 @@ st.markdown("""
         border-left:4px solid #1565c0; padding-left:10px;
         margin:28px 0 14px;
     }
+    div[data-testid="stSelectbox"] label {font-weight:600;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -177,17 +212,51 @@ st.markdown('<div class="main-title">⚡ Electricity Usage Overview</div>', unsa
 with st.spinner("⏳ กำลังดึงข้อมูลจาก Google Sheet..."):
     df = load_data_from_gsheet()
 
+all_weeks      = get_all_weeks(df)
 complete_weeks = sorted(get_complete_weeks(df))
 
-if len(complete_weeks) < 1:
-    st.error("ไม่พบสัปดาห์ที่ครบ 7 วัน กรุณาตรวจสอบข้อมูลใน Google Sheet")
+if not all_weeks:
+    st.error("ไม่พบข้อมูล กรุณาตรวจสอบ Google Sheet")
     st.stop()
 
-latest_week = complete_weeks[-1]
-prev_week   = complete_weeks[-2] if len(complete_weeks) >= 2 else None
+# ─── Week Selector (Header) ───────────────────────────────────────────────────
+# Build display labels: "W13 · 23 Mar – 29 Mar 2026"
+week_display_map = {}
+for yw in all_weeks:
+    label = week_label(yw, df)
+    is_complete = yw in complete_weeks
+    suffix = "" if is_complete else " ⚠️ ไม่ครบ 7 วัน"
+    week_display_map[yw] = f"{yw}  ·  {label}{suffix}"
+
+display_options = list(week_display_map.values())
+yw_keys         = list(week_display_map.keys())
+
+# Default to latest complete week (or latest available)
+default_yw  = complete_weeks[-1] if complete_weeks else all_weeks[-1]
+default_idx = yw_keys.index(default_yw)
+
+col_sel1, col_sel2, col_sel3 = st.columns([1, 2, 1])
+with col_sel2:
+    selected_display = st.selectbox(
+        "📅 เลือกสัปดาห์",
+        options=display_options,
+        index=default_idx,
+        help="เลือกสัปดาห์ที่ต้องการดู (⚠️ = ข้อมูลยังไม่ครบ 7 วัน)"
+    )
+
+selected_yw  = yw_keys[display_options.index(selected_display)]
+selected_idx = yw_keys.index(selected_yw)
+prev_yw      = yw_keys[selected_idx - 1] if selected_idx > 0 else None
+
+# Show week date range as subtitle
+sel_label = week_label(selected_yw, df)
+st.markdown(f'<div class="week-subtitle">📆 สัปดาห์ {selected_yw} &nbsp;|&nbsp; {sel_label}</div>',
+            unsafe_allow_html=True)
+
+st.markdown("---")
 
 # ─── Section 1: KPI Cards ─────────────────────────────────────────────────────
-agg       = week_agg(df, latest_week)
+agg       = week_agg(df, selected_yw)
 on_kwh    = agg["on_peak"]
 off_kwh   = agg["off_peak"]
 total_kwh = on_kwh + off_kwh
@@ -195,8 +264,8 @@ cost      = on_kwh * (ON_PEAK_RATE + FT_ADJ) + off_kwh * (OFF_PEAK_RATE + FT_ADJ
 on_pct    = on_kwh  / total_kwh * 100 if total_kwh else 0
 off_pct   = off_kwh / total_kwh * 100 if total_kwh else 0
 
-if prev_week:
-    agg_p      = week_agg(df, prev_week)
+if prev_yw:
+    agg_p      = week_agg(df, prev_yw)
     prev_total = agg_p["on_peak"] + agg_p["off_peak"]
     chg_total  = (total_kwh - prev_total)        / prev_total        * 100 if prev_total        else 0
     chg_on     = (on_kwh    - agg_p["on_peak"])  / agg_p["on_peak"]  * 100 if agg_p["on_peak"]  else 0
@@ -209,13 +278,15 @@ def badge(v):
     arrow = "▲" if v >= 0 else "▼"
     return f'<span class="{cls}">{arrow} {abs(v):.1f}%</span>'
 
+prev_label = week_label(prev_yw, df) if prev_yw else "N/A"
+
 c1, c2, c3, c4 = st.columns(4)
 with c1:
     st.markdown(f"""
     <div class="kpi-card">
         <div class="kpi-label">Total Energy This Week</div>
         <div class="kpi-value">{total_kwh:,.0f} <span class="kpi-unit">kWh</span></div>
-        <div class="kpi-sub">สัปดาห์ {latest_week} &nbsp; {badge(chg_total)}</div>
+        <div class="kpi-sub">vs สัปดาห์ก่อน &nbsp; {badge(chg_total)}</div>
     </div>""", unsafe_allow_html=True)
 with c2:
     st.markdown(f"""
@@ -241,7 +312,7 @@ with c4:
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-# ─── Section 2: Weekly Comparison ────────────────────────────────────────────
+# ─── Section 2: Weekly Comparison ─────────────────────────────────────────────
 st.markdown('<div class="section-header">📊 Weekly Usage Comparison</div>', unsafe_allow_html=True)
 
 departments    = sorted(df["department"].unique().tolist())
@@ -251,11 +322,11 @@ col_f, col_g = st.columns([1, 3])
 with col_f:
     dept_sel = st.selectbox("🔍 เลือกแผนก", filter_options, index=0)
 
-agg_cur  = week_agg(df, latest_week, dept_sel)
-agg_prev = week_agg(df, prev_week,   dept_sel) if prev_week else None
+agg_cur  = week_agg(df, selected_yw, dept_sel)
+agg_prev = week_agg(df, prev_yw,     dept_sel) if prev_yw else None
 
-label_cur  = f"สัปดาห์นี้\n({latest_week})"
-label_prev = f"สัปดาห์ที่แล้ว\n({prev_week})" if prev_week else "สัปดาห์ที่แล้ว"
+label_cur  = f"สัปดาห์นี้\n({sel_label})"
+label_prev = f"สัปดาห์ก่อน\n({prev_label})" if prev_yw else "สัปดาห์ก่อน"
 
 on_vals  = [agg_prev["on_peak"]  if agg_prev is not None else 0, agg_cur["on_peak"]]
 off_vals = [agg_prev["off_peak"] if agg_prev is not None else 0, agg_cur["off_peak"]]
@@ -284,11 +355,11 @@ fig_w.update_yaxes(gridcolor="#f0f0f0")
 with col_g:
     st.plotly_chart(fig_w, use_container_width=True)
 
-# ─── Section 3: Department Breakdown ─────────────────────────────────────────
+# ─── Section 3: Department Breakdown ──────────────────────────────────────────
 st.markdown('<div class="section-header">🏭 Department Usage Breakdown</div>', unsafe_allow_html=True)
 
-dept_cur  = dept_week_agg(df, latest_week).set_index("department")
-dept_prev = dept_week_agg(df, prev_week).set_index("department") if prev_week else None
+dept_cur  = dept_week_agg(df, selected_yw).set_index("department")
+dept_prev = dept_week_agg(df, prev_yw).set_index("department") if prev_yw else None
 all_depts = sorted(dept_cur.index.tolist())
 
 fig_d = make_subplots(
@@ -336,7 +407,7 @@ for i, dep in enumerate(all_depts, start=1):
         hovertemplate=f"{dep} Off Peak (นี้): %{{x:,.0f}} kWh<extra></extra>",
     ), row=i, col=1)
 
-    max_val = max(cur_on + cur_off, prv_on + prv_off)
+    max_val = max(cur_on + cur_off, prv_on + prv_off, 1)
     fig_d.add_annotation(
         x=max_val * 1.02, y=0.5,
         yref=f"y{i}", xref=f"x{i}",
@@ -361,9 +432,10 @@ st.plotly_chart(fig_d, use_container_width=True)
 # ─── Footer ───────────────────────────────────────────────────────────────────
 st.markdown("---")
 last_updated = datetime.now().strftime("%d/%m/%Y %H:%M")
+num_days_selected = df[df["year_week"] == selected_yw]["date"].nunique()
 st.caption(
-    f"📅 สัปดาห์ล่าสุด: **{latest_week}** | "
-    f"ก่อนหน้า: **{prev_week or 'N/A'}** | "
-    f"ข้อมูล {df['date'].nunique()} วัน | "
+    f"📅 สัปดาห์ที่เลือก: **{selected_yw}** ({sel_label}) | "
+    f"จำนวนข้อมูล: **{num_days_selected} วัน** | "
+    f"สัปดาห์ก่อน: **{prev_yw or 'N/A'}** ({prev_label}) | "
     f"🕐 โหลดล่าสุด: {last_updated}"
 )
