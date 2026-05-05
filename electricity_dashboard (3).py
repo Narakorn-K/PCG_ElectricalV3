@@ -408,7 +408,8 @@ st.markdown('<div class="section-header">🏭 Department Usage Breakdown</div>',
 
 dept_cur  = dept_week_agg(df, selected_yw).set_index("department")
 dept_prev = dept_week_agg(df, prev_yw).set_index("department") if prev_yw else None
-all_depts = sorted(dept_cur.index.tolist())
+dept_cur["total_combined"] = dept_cur["on_peak"] + dept_cur["off_peak"]
+all_depts = dept_cur.sort_values("total_combined", ascending=False).index.tolist()
 
 fig_d = make_subplots(
     rows=len(all_depts), cols=1,
@@ -431,28 +432,28 @@ for i, dep in enumerate(all_depts, start=1):
     show_leg  = (i == 1)
 
     fig_d.add_trace(go.Bar(
-        name="On Peak (ก่อน)", x=[prv_on], y=["ก่อน"],
+        name="On Peak (สัปดาห์ก่อน)", x=[prv_on], y=["สัปดาห์ก่อน"],
         orientation="h", marker_color="#ffcc80",
         legendgroup="p_on", showlegend=show_leg,
-        hovertemplate=f"{dep} On Peak (ก่อน): %{{x:,.0f}} kWh<extra></extra>",
+        hovertemplate=f"{dep} On Peak (สัปดาห์ก่อน): %{{x:,.0f}} kWh<extra></extra>",
     ), row=i, col=1)
     fig_d.add_trace(go.Bar(
-        name="Off Peak (ก่อน)", x=[prv_off], y=["ก่อน"],
+        name="Off Peak (สัปดาห์ก่อน)", x=[prv_off], y=["สัปดาห์ก่อน"],
         orientation="h", marker_color="#90caf9",
         legendgroup="p_off", showlegend=show_leg,
-        hovertemplate=f"{dep} Off Peak (ก่อน): %{{x:,.0f}} kWh<extra></extra>",
+        hovertemplate=f"{dep} Off Peak (สัปดาห์ก่อน): %{{x:,.0f}} kWh<extra></extra>",
     ), row=i, col=1)
     fig_d.add_trace(go.Bar(
-        name="On Peak (นี้)", x=[cur_on], y=["นี้"],
+        name="On Peak (สัปดาห์นี้)", x=[cur_on], y=["สัปดาห์นี้"],
         orientation="h", marker_color="#e65100",
         legendgroup="c_on", showlegend=show_leg,
-        hovertemplate=f"{dep} On Peak (นี้): %{{x:,.0f}} kWh<extra></extra>",
+        hovertemplate=f"{dep} On Peak (สัปดาห์นี้): %{{x:,.0f}} kWh<extra></extra>",
     ), row=i, col=1)
     fig_d.add_trace(go.Bar(
-        name="Off Peak (นี้)", x=[cur_off], y=["นี้"],
+        name="Off Peak (สัปดาห์นี้)", x=[cur_off], y=["สัปดาห์นี้"],
         orientation="h", marker_color="#1565c0",
         legendgroup="c_off", showlegend=show_leg,
-        hovertemplate=f"{dep} Off Peak (นี้): %{{x:,.0f}} kWh<extra></extra>",
+        hovertemplate=f"{dep} Off Peak (สัปดาห์นี้): %{{x:,.0f}} kWh<extra></extra>",
     ), row=i, col=1)
 
     max_val = max(cur_on + cur_off, prv_on + prv_off, 1)
