@@ -14,10 +14,10 @@ SHEET_ID   = "1Ym2yfzkLTyLTtJtLZSSgWoeew_IPWUaI_u6d45jKUnw"
 SHEET_NAME = "Daily"
 EXPORT_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=xlsx&sheet={quote(SHEET_NAME)}"
 
-# ─── Thai electricity tariff (PEA TOU rates, Baht/kWh) ───────────────────────
+# ─── Thai electricity tariff (MEA TOU rates, Baht/kWh) ───────────────────────
 ON_PEAK_RATE  = 4.1824
 OFF_PEAK_RATE = 2.6369
-FT_ADJ        = 0.3949
+FT_ADJ        = 0.1623
 
 # ─── Thai day / month abbreviations ──────────────────────────────────────────
 DAY_TH = {"อา": 6, "จ": 0, "อ": 1, "พ": 2, "พฤ": 3, "ศ": 4, "ส": 5}
