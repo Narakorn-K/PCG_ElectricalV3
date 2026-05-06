@@ -165,7 +165,7 @@ with st.sidebar:
     st.caption("📡 ดึงข้อมูลจาก Google Sheet อัตโนมัติ")
     st.caption("🔄 Auto-refresh ทุก 5 นาที")
     st.markdown("---")
-    st.caption("**อัตราค่าไฟ PEA TOU**")
+    st.caption("**อัตราค่าไฟ MEA TOU**")
     st.caption(f"• On Peak  : {ON_PEAK_RATE + FT_ADJ:.4f} ฿/kWh")
     st.caption(f"• Off Peak : {OFF_PEAK_RATE + FT_ADJ:.4f} ฿/kWh")
     st.caption(f"• Ft Surcharge : {FT_ADJ} ฿/kWh")
