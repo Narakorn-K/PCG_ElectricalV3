@@ -171,7 +171,7 @@ with st.sidebar:
     st.caption(f"• Ft Surcharge : {FT_ADJ} ฿/kWh")
 
 # ─── Load Data ────────────────────────────────────────────────────────────────
-with st.spinner("⏳ กำลังดึงข้อมูลจาก Google Sheet..."):
+with st.spinner("⏳ กำลังอัพเดทข้อมูลจาก Google Sheet..."):
     df = load_data()
 
 # ─── Tab Navigation ───────────────────────────────────────────────────────────
