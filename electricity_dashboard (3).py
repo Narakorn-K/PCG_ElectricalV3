@@ -502,7 +502,7 @@ def render_group(dept_name, bg,
     st.markdown('</div>', unsafe_allow_html=True)
 
 
-def render_all_blocks(period_col, period_val, prev_val,
+def render_all_blocks(df, ton, period_col, period_val, prev_val,
                       cur_label, prev_label, period_name):
     cur_da   = dept_agg(df, period_col, period_val)
     prev_da  = dept_agg(df, period_col, prev_val) if prev_val else pd.DataFrame()
@@ -544,34 +544,8 @@ def render_all_blocks(period_col, period_val, prev_val,
             )
 
 
-# ─── Sidebar ──────────────────────────────────────────────────────────────────
-with st.sidebar:
-    st.markdown("## ⚡ Energy Dashboard")
-    st.markdown("---")
-    if st.button("🔄 Refresh ข้อมูล", use_container_width=True):
-        st.cache_data.clear()
-        st.rerun()
-    st.markdown("---")
-    st.caption("📡 ดึงข้อมูลจาก Google Sheet อัตโนมัติ")
-    st.caption("🔄 Auto-refresh ทุก 5 นาที")
-    st.markdown("---")
-    st.caption("**อัตราค่าไฟ MEA TOU**")
-    st.caption(f"• On Peak  : {ON_PEAK_RATE + FT_ADJ:.4f} ฿/kWh")
-    st.caption(f"• Off Peak : {OFF_PEAK_RATE + FT_ADJ:.4f} ฿/kWh")
-    st.caption(f"• Ft Surcharge : {FT_ADJ} ฿/kWh")
-
-with st.spinner("⏳ กำลังดึงข้อมูล..."):
-    df  = load_data()
-    ton = load_ton_data()
-
-tab_weekly, tab_summary = st.tabs(["📋 รายสัปดาห์", "📊 สรุป 4 สัปดาห์"])
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# TAB 1 — รายสัปดาห์
-# ══════════════════════════════════════════════════════════════════════════════
-with tab_weekly:
-
+# ─── Page renderers ───────────────────────────────────────────────────────────
+def render_weekly_page(df, ton):
     all_weeks = sorted(df["year_week"].unique().tolist())
 
     def week_label(yw):
@@ -658,19 +632,13 @@ with tab_weekly:
     st.markdown("<br>", unsafe_allow_html=True)
 
     # ── รายแผนก ───────────────────────────────────────────────────────────────
-    render_all_blocks("year_week", sel_yw, prev_yw, sel_lbl, prev_lbl, "สัปดาห์ที่แล้ว")
+    render_all_blocks(df, ton, "year_week", sel_yw, prev_yw, sel_lbl, prev_lbl, "สัปดาห์ที่แล้ว")
 
     st.markdown("---")
     st.caption(f"📅 {sel_yw} ({sel_lbl}) | เทียบ: {prev_yw or 'N/A'} ({prev_lbl}) | 🕐 {datetime.now().strftime('%d/%m/%Y %H:%M')}")
 
-# ══════════════════════════════════════════════════════════════════════════════
-# TAB 2 — สรุป 4 สัปดาห์ (ตารางแบบ Weekly Energy Data)
-# ══════════════════════════════════════════════════════════════════════════════
-with tab_summary:
 
-    # เฉพาะสัปดาห์ครบ 7 วัน
-    wk_days        = df.groupby("year_week")["date"].nunique()
-    complete_weeks = sorted(wk_days[wk_days == 7].index.tolist())
+def render_summary_page(df, ton):
 
     def wlbl(yw):
         sub = df[df["year_week"] == yw]["date"]
@@ -681,195 +649,194 @@ with tab_summary:
             return f"Week {s.day}-{fmt_day(e)}"
         return f"Week {fmt_day_short(s)}-{fmt_day(e)}"
 
+    wk_days        = df.groupby("year_week")["date"].nunique()
+    complete_weeks = sorted(wk_days[wk_days == 7].index.tolist())
+
     if not complete_weeks:
         st.warning("ยังไม่มีสัปดาห์ที่ข้อมูลครบ 7 วัน")
-        complete_weeks = []
+        return
 
     col_s1, _, _ = st.columns([3, 2, 1])
     with col_s1:
-        # ใช้ complete_weeks โดยตรงเป็น options เพื่อหลีกเลี่ยงการ index ผิด
         sel_sum_yw = st.selectbox(
-            "📅 เลือกสัปดาห์ล่าสุด (แสดง 4 สัปดาห์ย้อนหลัง)",
+            "เลือกสัปดาห์ล่าสุด (แสดง 4 สัปดาห์ย้อนหลัง)",
             options=complete_weeks,
             format_func=lambda yw: f"{yw}  ({wlbl(yw)})",
             index=len(complete_weeks) - 1,
             key="sum_week",
         )
-        sel_sum_idx = complete_weeks.index(sel_sum_yw)
 
+    sel_sum_idx = complete_weeks.index(sel_sum_yw)
     four_weeks  = complete_weeks[max(0, sel_sum_idx - 3): sel_sum_idx + 1]
     four_labels = [wlbl(yw) for yw in four_weeks]
     n = len(four_weeks)
 
-    # ── รวบรวมข้อมูลต่อสัปดาห์ ────────────────────────────────────────────────
-    def get_ton(yw):
+    def get_ton_s(yw):
         return agg_ton(ton, "year_week", yw)
 
-    def get_dept_kwh(yw, dept):
+    def get_dept_kwh_s(yw, dept):
         sub = df[(df["year_week"] == yw) & (df["department"] == dept)]
         return float((sub["on_peak"] + sub["off_peak"]).sum())
 
-    def get_factory_kwh(yw):
+    def get_factory_kwh_s(yw):
         e = agg_kwh(df, "year_week", yw)
         return float(e["on_peak"] + e["off_peak"])
 
-    tons_w      = [get_ton(yw) for yw in four_weeks]
-    factory_w   = [get_factory_kwh(yw) for yw in four_weeks]
+    tons_w      = [get_ton_s(yw) for yw in four_weeks]
+    factory_w   = [get_factory_kwh_s(yw) for yw in four_weeks]
     kpt_factory = [factory_w[i] / tons_w[i] if tons_w[i] > 0 else None for i in range(n)]
 
     prod_depts    = sorted([d for d in df["department"].unique() if d not in NON_PRODUCTION_DEPTS])
     nonprod_depts = sorted([d for d in df["department"].unique() if d in NON_PRODUCTION_DEPTS])
 
-    prod_kwh   = {d: [get_dept_kwh(yw, d) for yw in four_weeks] for d in prod_depts}
-    nonprod_kwh= {d: [get_dept_kwh(yw, d) for yw in four_weeks] for d in nonprod_depts}
-    prod_kpt   = {d: [prod_kwh[d][i] / tons_w[i] if tons_w[i] > 0 else None
-                      for i in range(n)] for d in prod_depts}
+    prod_kwh    = {d: [get_dept_kwh_s(yw, d) for yw in four_weeks] for d in prod_depts}
+    nonprod_kwh = {d: [get_dept_kwh_s(yw, d) for yw in four_weeks] for d in nonprod_depts}
+    prod_kpt    = {d: [prod_kwh[d][i] / tons_w[i] if tons_w[i] > 0 else None
+                       for i in range(n)] for d in prod_depts}
 
-    prod_total_w   = [sum(prod_kwh[d][i] for d in prod_depts)   for i in range(n)]
-    nonprod_total_w= [sum(nonprod_kwh[d][i] for d in nonprod_depts) for i in range(n)]
-    prod_kpt_total = [prod_total_w[i] / tons_w[i] if tons_w[i] > 0 else None for i in range(n)]
+    prod_total_w    = [sum(prod_kwh[d][i] for d in prod_depts) for i in range(n)]
+    nonprod_total_w = [sum(nonprod_kwh[d][i] for d in nonprod_depts) for i in range(n)]
+    prod_kpt_total  = [prod_total_w[i] / tons_w[i] if tons_w[i] > 0 else None for i in range(n)]
 
-    # %Diff = เทียบสัปดาห์ล่าสุด vs สัปดาห์ก่อนหน้า (ช่อง -1)
-    def pct_d(vals):
+    def pct_d_s(vals):
         if n < 2 or vals[-2] in (None, 0):
             return None
-        cur = vals[-1]; prev = vals[-2]
+        cur = vals[-1]
         if cur is None:
             return None
-        return (cur - prev) / abs(prev) * 100
+        return (cur - vals[-2]) / abs(vals[-2]) * 100
 
-    def avg4(vals):
+    def avg4_s(vals):
         v = [x for x in vals if x is not None]
         return sum(v) / len(v) if v else None
 
-    # ── CSS ───────────────────────────────────────────────────────────────────
-    st.markdown("""
-    <style>
-    .tbl-wrap { overflow-x: auto; }
-    table.energy-tbl {
-        border-collapse: collapse;
-        width: 100%;
-        font-size: 13.5px;
-        font-family: Arial, sans-serif;
-    }
-    table.energy-tbl th {
-        background: #1a237e;
-        color: white;
-        padding: 8px 12px;
-        text-align: center;
-        border: 1px solid #ccc;
-        white-space: nowrap;
-    }
-    table.energy-tbl td {
-        padding: 6px 12px;
-        border: 1px solid #ddd;
-        text-align: right;
-        white-space: nowrap;
-    }
-    table.energy-tbl td.label-col {
-        text-align: left;
-        color: #333;
-    }
-    table.energy-tbl tr.section-header-row td {
-        background: #fff9c4;
-        font-weight: 700;
-        color: #1a237e;
-        text-align: left;
-        border-top: 2px solid #1a237e;
-    }
-    table.energy-tbl tr.factory-row td {
-        background: #f5f5f5;
-        font-weight: 600;
-    }
-    table.energy-tbl tr:hover td { background: #e8eaf0; }
-    .diff-up   { color: #c62828; font-weight: 700; }
-    .diff-down { color: #2e7d32; font-weight: 700; }
-    .diff-neu  { color: #555; }
-    .cur-week  { background: #e3f2fd !important; font-weight: 700; }
-    td.avg-col { background: #f3e5f5 !important; font-weight: 600; color: #4a148c; }
-    </style>
-    """, unsafe_allow_html=True)
+    CSS = """
+<style>
+.tbl-wrap{overflow-x:auto}
+table.etbl{border-collapse:collapse;width:100%;font-size:13px;font-family:Arial,sans-serif}
+table.etbl th{background:#1a237e;color:white;padding:8px 12px;text-align:center;border:1px solid #ccc;white-space:nowrap}
+table.etbl td{padding:6px 12px;border:1px solid #ddd;text-align:right;white-space:nowrap}
+table.etbl td.lc{text-align:left;color:#333}
+table.etbl tr.sh td{background:#fff9c4;font-weight:700;color:#1a237e;text-align:left;border-top:2px solid #1a237e}
+table.etbl tr.fr td{background:#f5f5f5;font-weight:600}
+td.cw{background:#e3f2fd!important;font-weight:700}
+td.av{background:#f3e5f5!important;font-weight:600;color:#4a148c}
+.dup{color:#c62828;font-weight:700}
+.ddn{color:#2e7d32;font-weight:700}
+</style>"""
+    st.markdown(CSS, unsafe_allow_html=True)
 
-    # ── build HTML table ──────────────────────────────────────────────────────
-    def fmt_n(v, dec=0):
-        if v is None: return "-"
-        return f"{v:,.{dec}f}"
+    def fn(v, dec=0):
+        return "-" if v is None else f"{v:,.{dec}f}"
 
-    def diff_cell(pct, invert=False):
-        if pct is None: return '<td class="diff-neu">-</td>'
+    def dcell(pct, inv=False):
+        if pct is None:
+            return "<td>-</td>"
+        cls = ("ddn" if pct > 0 else "dup") if inv else ("dup" if pct > 0 else "ddn")
         sign = "+" if pct > 0 else ""
-        abs_pct = abs(pct)
-        # invert: ลงเป็นแดง ขึ้นเป็นเขียว (สำหรับ Ton, Off Peak)
-        # normal: ขึ้นเป็นแดง ลงเป็นเขียว
-        if invert:
-            cls = "diff-down" if pct > 0 else "diff-up"
-        else:
-            cls = "diff-up" if pct > 0 else "diff-down"
-        return f'<td class="{cls}">{sign}{abs_pct:.1f}%</td>'
+        return f'<td class="{cls}">{sign}{abs(pct):.1f}%</td>'
 
-    def week_cells(vals, dec=0, last_bold=True):
-        cells = ""
+    def wcells(vals, dec=0):
+        out = ""
         for i, v in enumerate(vals):
-            cls = 'cur-week' if i == n-1 else ""
-            cells += f'<td class="{cls}">{fmt_n(v, dec)}</td>'
-        return cells
+            cls = "cw" if i == n - 1 else ""
+            out += f'<td class="{cls}">{fn(v, dec)}</td>'
+        return out
 
-    # header
-    html = '<div class="tbl-wrap"><table class="energy-tbl">'
-    html += "<tr><th style='text-align:left;min-width:200px'>Group</th>"
+    def drow(label, vals, dec=0, inv=False, indent=False, bold=False):
+        pad = "padding-left:22px;" if indent else ""
+        fw  = "font-weight:700;" if bold else ""
+        r   = f'<tr><td class="lc" style="{pad}{fw}">{label}</td>'
+        r  += wcells(vals, dec)
+        r  += dcell(pct_d_s(vals), inv=inv)
+        r  += f'<td class="av">{fn(avg4_s(vals), dec)}</td></tr>'
+        return r
+
+    def srow(label):
+        return f'<tr class="sh"><td colspan="{n+3}">{label}</td></tr>'
+
+    def sp():
+        return f'<tr><td colspan="{n+3}" style="padding:3px;border:none;background:#fafafa"></td></tr>'
+
+    H = '<div class="tbl-wrap"><table class="etbl">'
+    H += f'<tr><th style="text-align:left;min-width:220px">Group</th>'
     for lbl in four_labels:
-        html += f"<th>{lbl}</th>"
-    html += "<th>% Diff</th><th style='background:#4a148c'>AVG</th></tr>"
+        H += f"<th>{lbl}</th>"
+    H += '<th>% Diff</th><th style="background:#4a148c">AVG</th></tr>'
 
-    def section_row(label):
-        return f'<tr class="section-header-row"><td colspan="{n+3}">{label}</td></tr>'
+    H += f'<tr class="fr"><td class="lc"><b>Factory all (kWh)</b></td>'
+    H += wcells(factory_w, 0)
+    H += dcell(pct_d_s(factory_w))
+    H += f'<td class="av">{fn(avg4_s(factory_w), 0)}</td></tr>'
+    H += drow("Product Ton", tons_w, dec=2, inv=True)
+    H += drow("kWh/Ton", kpt_factory, dec=2)
+    H += sp()
 
-    def data_row(label, vals, dec=0, invert=False, indent=False, bold=False):
-        pdiff = pct_d(vals)
-        avg   = avg4(vals)
-        lbl_style = "padding-left:24px;" if indent else ""
-        fw = "font-weight:700;" if bold else ""
-        cells  = f'<td class="label-col" style="{lbl_style}{fw}">{label}</td>'
-        cells += week_cells(vals, dec)
-        cells += diff_cell(pdiff, invert=invert)
-        cells += f'<td class="avg-col">{fmt_n(avg, dec)}</td>'
-        return f"<tr>{cells}</tr>"
-
-    # ── Section 0: Factory all + Ton + kWh/Ton ────────────────────────────────
-    html += '<tr class="factory-row">' + f'<td class="label-col"><b>Factory all (kWh)</b></td>'
-    html += week_cells(factory_w, 0)
-    html += diff_cell(pct_d(factory_w))
-    html += f'<td class="avg-col">{fmt_n(avg4(factory_w), 0)}</td></tr>'
-
-    html += data_row("Product Ton", tons_w, dec=2, invert=True)
-    html += data_row("kWh/Ton", kpt_factory, dec=2)
-
-    html += "<tr><td colspan='{}'>".format(n+3) + "</td></tr>"  # spacer
-
-    # ── Section 1: ส่วนที่เกี่ยวข้องกับการผลิต (kWh) ──────────────────────────
-    html += section_row("ส่วนที่เกี่ยวข้องกับการผลิต (kWh)")
-    html += data_row("  รวม", prod_total_w, dec=0, bold=True)
+    H += srow("ส่วนที่เกี่ยวข้องกับการผลิต (kWh)")
+    H += drow("  รวม", prod_total_w, dec=0, bold=True)
     for d in prod_depts:
-        html += data_row(d, prod_kwh[d], dec=0, indent=True)
+        H += drow(d, prod_kwh[d], dec=0, indent=True)
+    H += sp()
 
-    html += "<tr><td colspan='{}'>".format(n+3) + "</td></tr>"
-
-    # ── Section 2: ส่วนที่เกี่ยวข้องกับการผลิต (kWh/Ton) ─────────────────────
-    html += section_row("ส่วนที่เกี่ยวข้องกับการผลิต (kWh/Ton)")
-    html += data_row("  รวม", prod_kpt_total, dec=2, bold=True)
+    H += srow("ส่วนที่เกี่ยวข้องกับการผลิต (kWh/Ton)")
+    H += drow("  รวม", prod_kpt_total, dec=2, bold=True)
     for d in prod_depts:
-        html += data_row(d, prod_kpt[d], dec=2, indent=True)
+        H += drow(d, prod_kpt[d], dec=2, indent=True)
+    H += sp()
 
-    html += "<tr><td colspan='{}'>".format(n+3) + "</td></tr>"
-
-    # ── Section 3: ส่วนที่ไม่เกี่ยวข้องกับการผลิต (kWh) ──────────────────────
-    html += section_row("ส่วนที่ไม่เกี่ยวข้องกับการผลิต (kWh)")
-    html += data_row("  รวม", nonprod_total_w, dec=0, bold=True)
+    H += srow("ส่วนที่ไม่เกี่ยวข้องกับการผลิต (kWh)")
+    H += drow("  รวม", nonprod_total_w, dec=0, bold=True)
     for d in nonprod_depts:
-        html += data_row(d, nonprod_kwh[d], dec=0, indent=True)
+        H += drow(d, nonprod_kwh[d], dec=0, indent=True)
 
-    html += "</table></div>"
-    st.markdown(html, unsafe_allow_html=True)
-
+    H += "</table></div>"
+    st.markdown(H, unsafe_allow_html=True)
     st.markdown("---")
-    st.caption(f"📅 แสดง {n} สัปดาห์ (ข้อมูลครบ 7 วัน) | สัปดาห์ที่เลือก: {sel_sum_yw} | 🕐 {datetime.now().strftime('%d/%m/%Y %H:%M')}")
+    st.caption(
+        f"แสดง {n} สัปดาห์ (ข้อมูลครบ 7 วัน) "
+        f"| สัปดาห์ที่เลือก: {sel_sum_yw} "
+        f"| {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+    )
+
+
+# ─── Sidebar ──────────────────────────────────────────────────────────────────
+with st.sidebar:
+    st.markdown("## ⚡ Energy Dashboard")
+    st.markdown("---")
+    if st.button("🔄 Refresh ข้อมูล", use_container_width=True):
+        st.cache_data.clear()
+        st.rerun()
+    st.markdown("---")
+    st.caption("📡 ดึงข้อมูลจาก Google Sheet อัตโนมัติ")
+    st.caption("🔄 Auto-refresh ทุก 5 นาที")
+    st.markdown("---")
+    st.caption("**อัตราค่าไฟ MEA TOU**")
+    st.caption(f"• On Peak  : {ON_PEAK_RATE + FT_ADJ:.4f} ฿/kWh")
+    st.caption(f"• Off Peak : {OFF_PEAK_RATE + FT_ADJ:.4f} ฿/kWh")
+    st.caption(f"• Ft Surcharge : {FT_ADJ} ฿/kWh")
+
+with st.spinner("⏳ กำลังดึงข้อมูล..."):
+    df  = load_data()
+    ton = load_ton_data()
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Page selector (replaces st.tabs to avoid full re-render / scroll-jump of the
+# hidden tab on every rerun — only the selected page's code below actually runs)
+# ══════════════════════════════════════════════════════════════════════════════
+if "active_page" not in st.session_state:
+    st.session_state.active_page = "📋 รายสัปดาห์"
+
+st.session_state.active_page = st.radio(
+    "เลือกมุมมอง",
+    options=["📋 รายสัปดาห์", "📊 สรุป 4 สัปดาห์"],
+    horizontal=True,
+    label_visibility="collapsed",
+    key="page_selector",
+)
+st.markdown("---")
+
+if st.session_state.active_page == "📋 รายสัปดาห์":
+    render_weekly_page(df, ton)
+
+if st.session_state.active_page == "📊 สรุป 4 สัปดาห์":
+    render_summary_page(df, ton)
