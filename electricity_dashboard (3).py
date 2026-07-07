@@ -583,10 +583,13 @@ with tab_weekly:
 
     col_s1, _, _ = st.columns([2, 2, 2])
     with col_s1:
-        yw_labels   = [f"{yw}  ({week_label(yw)})" for yw in all_weeks]
-        sel_display = st.selectbox("📅 เลือกสัปดาห์", yw_labels,
-                                   index=len(all_weeks) - 1, key="w_week")
-        sel_yw  = all_weeks[yw_labels.index(sel_display)]
+        sel_yw = st.selectbox(
+            "📅 เลือกสัปดาห์",
+            options=all_weeks,
+            format_func=lambda yw: f"{yw}  ({week_label(yw)})",
+            index=len(all_weeks) - 1,
+            key="w_week",
+        )
         sel_idx = all_weeks.index(sel_yw)
         prev_yw = all_weeks[sel_idx - 1] if sel_idx > 0 else None
 
@@ -680,16 +683,18 @@ with tab_summary:
 
     if not complete_weeks:
         st.warning("ยังไม่มีสัปดาห์ที่ข้อมูลครบ 7 วัน")
-        st.stop()
+        complete_weeks = []
 
     col_s1, _, _ = st.columns([3, 2, 1])
     with col_s1:
-        sum_labels   = [f"{yw}  ({wlbl(yw)})" for yw in complete_weeks]
-        sel_sum_disp = st.selectbox(
+        # ใช้ complete_weeks โดยตรงเป็น options เพื่อหลีกเลี่ยงการ index ผิด
+        sel_sum_yw = st.selectbox(
             "📅 เลือกสัปดาห์ล่าสุด (แสดง 4 สัปดาห์ย้อนหลัง)",
-            sum_labels, index=len(complete_weeks) - 1, key="sum_week"
+            options=complete_weeks,
+            format_func=lambda yw: f"{yw}  ({wlbl(yw)})",
+            index=len(complete_weeks) - 1,
+            key="sum_week",
         )
-        sel_sum_yw  = complete_weeks[sum_labels.index(sel_sum_disp)]
         sel_sum_idx = complete_weeks.index(sel_sum_yw)
 
     four_weeks  = complete_weeks[max(0, sel_sum_idx - 3): sel_sum_idx + 1]
