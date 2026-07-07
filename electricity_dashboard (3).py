@@ -564,7 +564,7 @@ with st.spinner("⏳ กำลังดึงข้อมูล..."):
     df  = load_data()
     ton = load_ton_data()
 
-tab_weekly, tab_monthly = st.tabs(["📋 รายสัปดาห์", "📅 รายเดือน"])
+tab_weekly, tab_summary = st.tabs(["📋 รายสัปดาห์", "📊 สรุป 4 สัปดาห์"])
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -660,93 +660,217 @@ with tab_weekly:
     st.markdown("---")
     st.caption(f"📅 {sel_yw} ({sel_lbl}) | เทียบ: {prev_yw or 'N/A'} ({prev_lbl}) | 🕐 {datetime.now().strftime('%d/%m/%Y %H:%M')}")
 
-
 # ══════════════════════════════════════════════════════════════════════════════
-# TAB 2 — รายเดือน
+# TAB 2 — สรุป 4 สัปดาห์ย้อนหลัง
 # ══════════════════════════════════════════════════════════════════════════════
-with tab_monthly:
+with tab_summary:
 
-    all_ym = sorted(df["ym"].unique().tolist())
+    # เฉพาะสัปดาห์ที่ข้อมูลครบ 7 วัน
+    wk_days        = df.groupby("year_week")["date"].nunique()
+    complete_weeks = sorted(wk_days[wk_days == 7].index.tolist())
 
-    def month_label(ym):
-        y, m = ym.split("-")
-        return f"{MONTH_TH[int(m)]} {y}"
+    def week_label_s(yw):
+        sub = df[df["year_week"] == yw]["date"]
+        if sub.empty:
+            return yw
+        s, e = sub.min(), sub.max()
+        return f"{fmt_day_short(s)} – {fmt_day(e)}" if s.month != e.month else f"{s.day} – {fmt_day(e)}"
+
+    if len(complete_weeks) < 1:
+        st.warning("ยังไม่มีสัปดาห์ที่ข้อมูลครบ 7 วัน")
+        st.stop()
 
     col_s1, _, _ = st.columns([2, 2, 2])
     with col_s1:
-        ym_labels   = [month_label(ym) for ym in all_ym]
-        sel_ym_disp = st.selectbox("📅 เลือกเดือน", ym_labels,
-                                   index=len(all_ym) - 1, key="m_month")
-        sel_ym     = all_ym[ym_labels.index(sel_ym_disp)]
-        sel_ym_idx = all_ym.index(sel_ym)
-        prev_ym    = all_ym[sel_ym_idx - 1] if sel_ym_idx > 0 else None
+        # default = สัปดาห์ล่าสุด
+        sum_labels  = [f"{yw}  ({week_label_s(yw)})" for yw in complete_weeks]
+        sel_sum_disp = st.selectbox(
+            "📅 เลือกสัปดาห์ล่าสุด (แสดง 4 สัปดาห์ย้อนหลัง)",
+            sum_labels, index=len(complete_weeks) - 1, key="sum_week"
+        )
+        sel_sum_yw  = complete_weeks[sum_labels.index(sel_sum_disp)]
+        sel_sum_idx = complete_weeks.index(sel_sum_yw)
 
-    sel_mlbl  = month_label(sel_ym)
-    prev_mlbl = month_label(prev_ym) if prev_ym else "N/A"
+    # 4 สัปดาห์ (รวมสัปดาห์ที่เลือก) — ต้องมีในรายการ complete_weeks
+    four_weeks = complete_weeks[max(0, sel_sum_idx - 3): sel_sum_idx + 1]
+    four_labels = [week_label_s(yw) for yw in four_weeks]
 
-    st.markdown(f"### ⚡ เดือน {sel_mlbl}")
+    st.markdown(f"### 📊 สรุป 4 สัปดาห์ — {' / '.join([w.split()[0] + ' ' + w.split()[-1] if len(w.split()) > 1 else w for w in four_labels])}")
     st.markdown("---")
 
-    # ── KPI Cards ─────────────────────────────────────────────────────────────
-    cur_me    = agg_kwh(df, "ym", sel_ym)
-    prev_me   = agg_kwh(df, "ym", prev_ym) if prev_ym else pd.Series({"on_peak": 0, "off_peak": 0})
-    cur_mton  = agg_ton(ton, "ym", sel_ym)
-    prev_mton = agg_ton(ton, "ym", prev_ym) if prev_ym else 0.0
+    # ── ตาราง KPI รายสัปดาห์ ──────────────────────────────────────────────────
+    rows = []
+    for yw in four_weeks:
+        e    = agg_kwh(df, "year_week", yw)
+        t    = agg_ton(ton, "year_week", yw)
+        on_v = e["on_peak"]; off_v = e["off_peak"]
+        tot  = on_v + off_v
+        cost = on_v * (ON_PEAK_RATE + FT_ADJ) + off_v * (OFF_PEAK_RATE + FT_ADJ)
+        kpt  = tot / t if t > 0 else None
+        rows.append({
+            "สัปดาห์":          yw,
+            "ช่วงวัน":          week_label_s(yw),
+            "Ton ผลิต":         round(t, 1),
+            "Total kWh":        round(tot, 0),
+            "On Peak kWh":      round(on_v, 0),
+            "On Peak %":        round(on_v / tot * 100, 1) if tot else 0,
+            "Off Peak kWh":     round(off_v, 0),
+            "Off Peak %":       round(off_v / tot * 100, 1) if tot else 0,
+            "ค่าไฟ (฿)":        round(cost, 0),
+            "kWh/Ton":          round(kpt, 2) if kpt else None,
+        })
 
-    cur_mon  = cur_me["on_peak"];  cur_moff  = cur_me["off_peak"]
-    prev_mon = prev_me["on_peak"]; prev_moff = prev_me["off_peak"]
-    cur_mtot  = cur_mon  + cur_moff;  prev_mtot = prev_mon + prev_moff
-    cur_mcost  = cur_mon  * (ON_PEAK_RATE + FT_ADJ) + cur_moff  * (OFF_PEAK_RATE + FT_ADJ)
-    prev_mcost = prev_mon * (ON_PEAK_RATE + FT_ADJ) + prev_moff * (OFF_PEAK_RATE + FT_ADJ)
-    cur_mkpt   = cur_mtot  / cur_mton  if cur_mton  > 0 else None
-    prev_mkpt  = prev_mtot / prev_mton if prev_mton > 0 else None
-    mon_pct    = cur_mon  / cur_mtot * 100 if cur_mtot else 0
-    moff_pct   = cur_moff / cur_mtot * 100 if cur_mtot else 0
+    summary_df = pd.DataFrame(rows)
 
-    c1, c2, c3, c4, c5, c6 = st.columns(6)
-    with c1:
-        st.markdown(build_kpi_card("Production Ton", f"{cur_mton:,.1f}", "Ton",
-            f"ก่อน {prev_mton:,.1f} Ton", pct_diff(cur_mton, prev_mton), "#00838f", invert=True),
-            unsafe_allow_html=True)
-    with c2:
-        st.markdown(build_kpi_card("Total Energy", f"{cur_mtot:,.0f}", "kWh",
-            f"ก่อน {prev_mtot:,.0f} kWh", pct_diff(cur_mtot, prev_mtot), "#1565c0"),
-            unsafe_allow_html=True)
-    with c3:
-        st.markdown(build_kpi_card("On Peak", f"{cur_mon:,.0f}", "kWh",
-            f"สัดส่วน {mon_pct:.1f}%", pct_diff(cur_mon, prev_mon), "#e65100"),
-            unsafe_allow_html=True)
-    with c4:
-        st.markdown(build_kpi_card("Off Peak", f"{cur_moff:,.0f}", "kWh",
-            f"สัดส่วน {moff_pct:.1f}%", pct_diff(cur_moff, prev_moff), "#2e7d32", invert=True),
-            unsafe_allow_html=True)
-    with c5:
-        st.markdown(build_kpi_card("ค่าไฟโดยประมาณ", f"{cur_mcost:,.0f}", "฿",
-            "อัตรา TOU + Ft", pct_diff(cur_mcost, prev_mcost), "#6a1b9a"),
-            unsafe_allow_html=True)
-    with c6:
-        mkpt_val = f"{cur_mkpt:,.2f}" if cur_mkpt else "N/A"
-        mkpt_sub = f"ก่อน {prev_mkpt:.2f}" if prev_mkpt else "ไม่มีข้อมูล Ton"
-        st.markdown(build_kpi_card("kWh / Ton", mkpt_val, "",
-            mkpt_sub, pct_diff(cur_mkpt, prev_mkpt) if (cur_mkpt and prev_mkpt) else 0, "#00897b"),
-            unsafe_allow_html=True)
+    # ── แสดงตาราง ─────────────────────────────────────────────────────────────
+    st.markdown('<div class="section-header">📋 ตารางสรุปรายสัปดาห์</div>', unsafe_allow_html=True)
 
-    st.markdown("<br>", unsafe_allow_html=True)
+    def color_diff(val, col_vals, invert=False):
+        """highlight cell เทียบกับค่าก่อนหน้า"""
+        idx = list(col_vals).index(val)
+        if idx == 0:
+            return "background-color: #f5f5f5; color: #333"
+        prev = list(col_vals)[idx - 1]
+        if prev == 0 or prev is None or val is None:
+            return ""
+        diff = (val - prev) / abs(prev)
+        if invert:
+            color = "#e8f5e9" if diff < 0 else "#ffebee"
+            txt   = "#2e7d32" if diff < 0 else "#c62828"
+        else:
+            color = "#ffebee" if diff > 0 else "#e8f5e9"
+            txt   = "#c62828" if diff > 0 else "#2e7d32"
+        return f"background-color: {color}; color: {txt}; font-weight: 600"
 
-    # ── Factory รวม ───────────────────────────────────────────────────────────
-    st.markdown('<div class="section-header">📊 kWh/Ton — ทั้งโรงงาน (Factory)</div>',
-                unsafe_allow_html=True)
-    render_group(
-        dept_name="ทั้งโรงงาน", bg=GROUP_BG[0],
-        cur_label=sel_mlbl, prev_label=prev_mlbl, period_name="เดือนก่อน",
-        cur_on=cur_mon, prev_on=prev_mon, cur_off=cur_moff, prev_off=prev_moff,
-        cur_ton=cur_mton, prev_ton=prev_mton, is_production=True, chart_height=340,
-    )
+    display_df = summary_df.copy()
+    display_df["On Peak"] = display_df.apply(
+        lambda r: f"{r['On Peak kWh']:,.0f} kWh ({r['On Peak %']:.1f}%)", axis=1)
+    display_df["Off Peak"] = display_df.apply(
+        lambda r: f"{r['Off Peak kWh']:,.0f} kWh ({r['Off Peak %']:.1f}%)", axis=1)
+    display_df["kWh/Ton"] = display_df["kWh/Ton"].apply(
+        lambda v: f"{v:,.2f}" if v else "N/A")
+    display_df["Ton ผลิต"] = display_df["Ton ผลิต"].apply(lambda v: f"{v:,.1f}")
+    display_df["Total kWh"] = display_df["Total kWh"].apply(lambda v: f"{v:,.0f}")
+    display_df["ค่าไฟ (฿)"] = display_df["ค่าไฟ (฿)"].apply(lambda v: f"{v:,.0f}")
 
-    st.markdown("<br>", unsafe_allow_html=True)
+    show_cols = ["สัปดาห์", "ช่วงวัน", "Ton ผลิต", "Total kWh",
+                 "On Peak", "Off Peak", "ค่าไฟ (฿)", "kWh/Ton"]
+    st.dataframe(display_df[show_cols], use_container_width=True, hide_index=True)
 
-    # ── รายแผนก ───────────────────────────────────────────────────────────────
-    render_all_blocks("ym", sel_ym, prev_ym, sel_mlbl, prev_mlbl, "เดือนก่อน")
+    # ── กราฟ Trend 4 สัปดาห์ ──────────────────────────────────────────────────
+    st.markdown('<div class="section-header">📈 Trend 4 สัปดาห์</div>', unsafe_allow_html=True)
+
+    x_labels = [f"{yw}\n({week_label_s(yw)})" for yw in four_weeks]
+    tons      = [agg_ton(ton, "year_week", yw) for yw in four_weeks]
+    on_list   = [agg_kwh(df, "year_week", yw)["on_peak"]  for yw in four_weeks]
+    off_list  = [agg_kwh(df, "year_week", yw)["off_peak"] for yw in four_weeks]
+    tot_list  = [o + f for o, f in zip(on_list, off_list)]
+    kpt_list  = [tot_list[i] / tons[i] if tons[i] > 0 else None for i in range(len(four_weeks))]
+
+    col_l, col_r = st.columns(2)
+
+    # กราฟซ้าย: Total kWh stacked On/Off
+    with col_l:
+        fig_trend = make_subplots(specs=[[{"secondary_y": True}]])
+        fig_trend.add_trace(go.Bar(
+            name="Off Peak", x=x_labels, y=off_list,
+            marker_color="#1565c0",
+            text=[f"{v:,.0f}" for v in off_list],
+            textposition="inside", insidetextanchor="middle",
+            textfont=dict(color="white", size=11),
+        ), secondary_y=False)
+        fig_trend.add_trace(go.Bar(
+            name="On Peak", x=x_labels, y=on_list,
+            marker_color="#e65100",
+            text=[f"{v:,.0f}" for v in on_list],
+            textposition="inside", insidetextanchor="middle",
+            textfont=dict(color="white", size=11),
+        ), secondary_y=False)
+        for xl, tv in zip(x_labels, tot_list):
+            fig_trend.add_annotation(
+                x=xl, y=tv, text=f"<b>{tv:,.0f}</b>",
+                showarrow=False, yshift=10, font=dict(size=11, color="#1a237e"),
+            )
+        fig_trend.update_layout(
+            title_text="Total kWh — On Peak / Off Peak", title_font_size=13,
+            barmode="stack", height=320,
+            legend=dict(orientation="h", y=1.12, x=1, xanchor="right", font=dict(size=11)),
+            margin=dict(t=50, b=30, l=10, r=15),
+            plot_bgcolor="white", paper_bgcolor="rgba(0,0,0,0)",
+        )
+        fig_trend.update_yaxes(title_text="kWh", gridcolor="#eee",
+                               range=[0, max(tot_list, default=1) * 1.22], secondary_y=False)
+        fig_trend.update_xaxes(gridcolor="#eee")
+        st.plotly_chart(fig_trend, use_container_width=True)
+
+    # กราฟขวา: Ton bar + kWh/Ton line
+    with col_r:
+        fig_kpt = make_subplots(specs=[[{"secondary_y": True}]])
+        fig_kpt.add_trace(go.Bar(
+            name="Ton ผลิต", x=x_labels, y=tons,
+            marker_color="#1565c0",
+            text=[f"{v:,.1f} Ton" for v in tons],
+            textposition="inside", insidetextanchor="middle",
+            textfont=dict(color="white", size=11),
+        ), secondary_y=False)
+        valid_kpt = [v for v in kpt_list if v is not None]
+        if valid_kpt:
+            y_kpt = [v if v else 0 for v in kpt_list]
+            fig_kpt.add_trace(go.Scatter(
+                name="kWh/Ton", x=x_labels, y=y_kpt,
+                mode="lines+markers+text",
+                line=dict(color="#e65100", width=3),
+                marker=dict(size=9, color="#e65100"),
+                text=[f"{v:,.2f}" if v else "" for v in y_kpt],
+                textposition="top center",
+                textfont=dict(size=12, color="#e65100"),
+            ), secondary_y=True)
+        fig_kpt.update_layout(
+            title_text="Ton ผลิต & kWh/Ton", title_font_size=13,
+            height=320,
+            legend=dict(orientation="h", y=1.12, x=1, xanchor="right", font=dict(size=11)),
+            margin=dict(t=50, b=30, l=10, r=55),
+            plot_bgcolor="white", paper_bgcolor="rgba(0,0,0,0)",
+        )
+        max_ton = max(tons, default=1)
+        max_kpt = max(valid_kpt, default=1)
+        fig_kpt.update_yaxes(title_text="Ton", gridcolor="#eee",
+                             range=[0, max_ton * 1.28], secondary_y=False)
+        fig_kpt.update_yaxes(title_text="kWh/Ton", showgrid=False,
+                             range=[0, max_kpt * 1.40], secondary_y=True)
+        fig_kpt.update_xaxes(gridcolor="#eee")
+        st.plotly_chart(fig_kpt, use_container_width=True)
+
+    # ── ตาราง รายแผนก 4 สัปดาห์ ───────────────────────────────────────────────
+    st.markdown('<div class="section-header">🏭 kWh รายแผนก — 4 สัปดาห์</div>', unsafe_allow_html=True)
+
+    all_depts = sorted(df["department"].unique().tolist())
+    dept_rows = []
+    for dept in all_depts:
+        row = {"แผนก": dept}
+        for yw, lbl in zip(four_weeks, four_labels):
+            sub  = df[(df["year_week"] == yw) & (df["department"] == dept)]
+            tot  = float((sub["on_peak"] + sub["off_peak"]).sum())
+            row[yw] = round(tot, 0)
+        dept_rows.append(row)
+
+    dept_df = pd.DataFrame(dept_rows)
+    # เพิ่มแถว Total
+    total_row = {"แผนก": "🏭 รวมทั้งหมด"}
+    for yw in four_weeks:
+        total_row[yw] = round(dept_df[yw].sum(), 0)
+    dept_df = pd.concat([dept_df, pd.DataFrame([total_row])], ignore_index=True)
+
+    # rename columns เป็น label สั้น
+    rename_map = {yw: f"{yw}\n({week_label_s(yw)})" for yw in four_weeks}
+    dept_df = dept_df.rename(columns=rename_map)
+
+    # format ตัวเลข
+    num_cols = list(rename_map.values())
+    for c in num_cols:
+        dept_df[c] = dept_df[c].apply(lambda v: f"{v:,.0f}")
+
+    st.dataframe(dept_df, use_container_width=True, hide_index=True)
 
     st.markdown("---")
-    st.caption(f"📅 {sel_mlbl} | เทียบ: {prev_mlbl} | 🕐 {datetime.now().strftime('%d/%m/%Y %H:%M')}")
+    st.caption(f"📅 แสดง {len(four_weeks)} สัปดาห์ (ข้อมูลครบ 7 วัน) | สัปดาห์ที่เลือก: {sel_sum_yw} | 🕐 {datetime.now().strftime('%d/%m/%Y %H:%M')}")
