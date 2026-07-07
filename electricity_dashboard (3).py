@@ -828,15 +828,15 @@ if "active_page" not in st.session_state:
 
 st.session_state.active_page = st.radio(
     "เลือกมุมมอง",
-    options=["📋 รายสัปดาห์", "📊 สรุป 4 สัปดาห์"],
+    options=["📊 กราฟรายสัปดาห์", "📋 ตารางสรุป 4 สัปดาห์"],
     horizontal=True,
     label_visibility="collapsed",
     key="page_selector",
 )
 st.markdown("---")
 
-if st.session_state.active_page == "📋 รายสัปดาห์":
+if st.session_state.active_page == "📊 กราฟรายสัปดาห์":
     render_weekly_page(df, ton)
 
-if st.session_state.active_page == "📊 สรุป 4 สัปดาห์":
+if st.session_state.active_page == "📋 ตารางสรุป 4 สัปดาห์":
     render_summary_page(df, ton)
