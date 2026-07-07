@@ -323,7 +323,7 @@ def make_onoff_chart(cur_label, prev_label, cur_on, prev_on,
 
     fig.add_trace(go.Bar(
         name="Off Peak", x=x, y=off_vals,
-        marker_color=["#64b5f6", "#1565c0"],
+        marker_color="#1565c0",
         text=[f"{off_vals[i]:,.0f} kWh ({pct_lbl(off_vals[i], tot_vals[i])})"
               for i in range(2)],
         textposition="inside", insidetextanchor="middle",
@@ -332,7 +332,7 @@ def make_onoff_chart(cur_label, prev_label, cur_on, prev_on,
 
     fig.add_trace(go.Bar(
         name="On Peak", x=x, y=on_vals,
-        marker_color=["#ffb74d", "#e65100"],
+        marker_color="#e65100",
         text=[f"{on_vals[i]:,.0f} kWh ({pct_lbl(on_vals[i], tot_vals[i])})"
               for i in range(2)],
         textposition="inside", insidetextanchor="middle",
@@ -392,7 +392,7 @@ def make_kwh_only_chart(cur_label, prev_label, cur_on, prev_on,
     fig = go.Figure()
     fig.add_trace(go.Bar(
         name="Off Peak", x=x, y=off_vals,
-        marker_color=["#64b5f6", "#1565c0"],
+        marker_color="#1565c0",
         text=[f"{off_vals[i]:,.0f} kWh ({pct_lbl(off_vals[i], tot_vals[i])})"
               for i in range(2)],
         textposition="inside", insidetextanchor="middle",
@@ -400,7 +400,7 @@ def make_kwh_only_chart(cur_label, prev_label, cur_on, prev_on,
     ))
     fig.add_trace(go.Bar(
         name="On Peak", x=x, y=on_vals,
-        marker_color=["#ffb74d", "#e65100"],
+        marker_color="#e65100",
         text=[f"{on_vals[i]:,.0f} kWh ({pct_lbl(on_vals[i], tot_vals[i])})"
               for i in range(2)],
         textposition="inside", insidetextanchor="middle",
