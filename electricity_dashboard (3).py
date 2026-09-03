@@ -361,7 +361,7 @@ def make_onoff_chart(cur_label, prev_label, cur_on, prev_on,
             marker=dict(size=10, color="#f7f12a"),
             text=[f"{v:,.2f}" if v else "" for v in y_kpt],
             textposition="top center",
-            textfont=dict(size=20, color="#43a047"),
+            textfont=dict(size=20, color="#f7f12a"),
         ), secondary_y=True)
 
     fig.update_layout(
