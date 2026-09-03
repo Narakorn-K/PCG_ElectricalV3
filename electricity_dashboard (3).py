@@ -35,45 +35,45 @@ MONTH_TH = {
 GROUP_BG = ["#f0f4ff", "#f0fff4", "#fff8f0", "#fdf0ff",
             "#f0f9ff", "#fffff0", "#fff0f5", "#f5fff0"]
 
-# ─── Font scale: all text sizes below are the ORIGINAL values × 1.5 ──────────
+# ─── Font scale: all text sizes below are the ORIGINAL values × 1.5, then reduced by 15% ──
 st.markdown("""
 <style>
 .kpi-card {
     border: 1px solid #e8eaf0;
-    border-radius: 12px;
-    padding: 16px 18px 12px;
+    border-radius: 10px;
+    padding: 14px 15px 10px;
     text-align: center;
-    border-top: 4px solid #1565c0;
+    border-top: 3px solid #1565c0;
     background: #fff;
 }
-.kpi-label { font-size: 18px; color: #666; font-weight: 600; text-transform: uppercase;
+.kpi-label { font-size: 15px; color: #666; font-weight: 600; text-transform: uppercase;
              letter-spacing: 0.5px; margin-bottom: 4px; }
-.kpi-value { font-size: 33px; font-weight: 800; color: #1a237e; line-height: 1.2; }
-.kpi-unit  { font-size: 20px; font-weight: 400; }
-.kpi-sub   { font-size: 18px; color: #999; margin-top: 4px; }
+.kpi-value { font-size: 28px; font-weight: 800; color: #1a237e; line-height: 1.2; }
+.kpi-unit  { font-size: 17px; font-weight: 400; }
+.kpi-sub   { font-size: 15px; color: #999; margin-top: 4px; }
 .summary-box {
-    border-left: 4px solid #1565c0;
-    border-radius: 0 8px 8px 0;
-    padding: 12px 20px;
-    margin-top: 4px;
-    margin-bottom: 4px;
-    font-size: 21px;
+    border-left: 3px solid #1565c0;
+    border-radius: 0 7px 7px 0;
+    padding: 10px 17px;
+    margin-top: 3px;
+    margin-bottom: 3px;
+    font-size: 18px;
     line-height: 2.0;
     color: #333;
     background: rgba(255,255,255,0.75);
 }
 .section-header {
-    font-size: 23px; font-weight: 700; color: #1a237e;
-    border-left: 4px solid #1565c0; padding-left: 10px;
-    margin: 20px 0 10px;
+    font-size: 20px; font-weight: 700; color: #1a237e;
+    border-left: 3px solid #1565c0; padding-left: 9px;
+    margin: 17px 0 9px;
 }
 .group-block {
-    border-radius: 10px;
-    padding: 16px 20px 12px;
-    margin-bottom: 12px;
+    border-radius: 9px;
+    padding: 14px 17px 10px;
+    margin-bottom: 10px;
 }
 .dept-name {
-    font-size: 23px; font-weight: 700; color: #1a237e; margin-bottom: 6px;
+    font-size: 20px; font-weight: 700; color: #1a237e; margin-bottom: 5px;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -104,12 +104,12 @@ def pct_diff(cur, prev):
 
 def diff_badge(pct, invert=False):
     if abs(pct) < 0.05:
-        return '<span style="color:#999;font-size:19px;">— 0%</span>'
+        return '<span style="color:#999;font-size:16px;">— 0%</span>'
     up_color   = "#43a047" if invert else "#e53935"
     down_color = "#e53935" if invert else "#43a047"
     color = up_color if pct > 0 else down_color
     arrow = "▲" if pct > 0 else "▼"
-    return f'<span style="color:{color};font-weight:700;font-size:19px;">{arrow} {abs(pct):.1f}%</span>'
+    return f'<span style="color:{color};font-weight:700;font-size:16px;">{arrow} {abs(pct):.1f}%</span>'
 
 
 def diff_text(pct, invert=False):
@@ -260,7 +260,7 @@ def dept_agg(data, period_col, period_val):
 
 # ─── Chart: LEFT — Ton bar + kWh/Ton line (50%) ───────────────────────────────
 def make_kpt_chart(cur_label, prev_label, cur_ton, prev_ton,
-                   cur_kwh, prev_kwh, height=320):
+                   cur_kwh, prev_kwh, height=272):
     cur_kpt  = cur_kwh  / cur_ton  if cur_ton  > 0 else 0.0
     prev_kpt = prev_kwh / prev_ton if prev_ton > 0 else 0.0
     x = [f"ก่อนหน้า\n({prev_label})", f"ปัจจุบัน\n({cur_label})"]
@@ -271,7 +271,7 @@ def make_kpt_chart(cur_label, prev_label, cur_ton, prev_ton,
         marker_color=["#90caf9", "#1565c0"],
         text=[f"{v:,.1f} Ton" for v in [prev_ton, cur_ton]],
         textposition="inside", insidetextanchor="middle",
-        textfont=dict(color="white", size=20),
+        textfont=dict(color="white", size=17),
         width=0.45,
     ), secondary_y=False)
 
@@ -280,26 +280,26 @@ def make_kpt_chart(cur_label, prev_label, cur_ton, prev_ton,
             name="kWh/Ton", x=x, y=[prev_kpt, cur_kpt],
             mode="lines+markers+text",
             line=dict(color="#e65100", width=3),
-            marker=dict(size=10, color="#e65100"),
+            marker=dict(size=9, color="#e65100"),
             text=[f"{v:,.2f}" for v in [prev_kpt, cur_kpt]],
             textposition="top center",
-            textfont=dict(size=21, color="#e65100"),
+            textfont=dict(size=18, color="#e65100"),
         ), secondary_y=True)
 
     max_ton = max(prev_ton, cur_ton, 1)
     max_kpt = max(prev_kpt, cur_kpt, 1)
     fig.update_layout(
         height=height, barmode="group", showlegend=True,
-        legend=dict(orientation="h", y=1.12, x=1, xanchor="right", font=dict(size=17)),
+        legend=dict(orientation="h", y=1.12, x=1, xanchor="right", font=dict(size=14)),
         margin=dict(t=40, b=30, l=10, r=55),
         plot_bgcolor="white", paper_bgcolor="rgba(0,0,0,0)",
-        font=dict(size=17),
+        font=dict(size=14),
     )
-    fig.update_yaxes(title_text="Ton", title_font=dict(size=18), tickfont=dict(size=16),
+    fig.update_yaxes(title_text="Ton", title_font=dict(size=15), tickfont=dict(size=14),
                      gridcolor="#eee", range=[0, max_ton * 1.28], secondary_y=False)
-    fig.update_yaxes(title_text="kWh/Ton", title_font=dict(size=18), tickfont=dict(size=16),
+    fig.update_yaxes(title_text="kWh/Ton", title_font=dict(size=15), tickfont=dict(size=14),
                      showgrid=False, range=[0, max_kpt * 1.40], secondary_y=True)
-    fig.update_xaxes(gridcolor="#eee", tickfont=dict(size=17))
+    fig.update_xaxes(gridcolor="#eee", tickfont=dict(size=14))
     return fig
 
 
@@ -307,7 +307,7 @@ def make_kpt_chart(cur_label, prev_label, cur_ton, prev_ton,
 def make_onoff_chart(cur_label, prev_label, cur_on, prev_on,
                      cur_off, prev_off,
                      cur_ton=0.0, prev_ton=0.0,
-                     height=320):
+                     height=272):
     x        = [f"ก่อนหน้า\n({prev_label})", f"ปัจจุบัน\n({cur_label})"]
     on_vals  = [prev_on,  cur_on]
     off_vals = [prev_off, cur_off]
@@ -329,7 +329,7 @@ def make_onoff_chart(cur_label, prev_label, cur_on, prev_on,
         text=[f"{off_vals[i]:,.0f} kWh ({pct_lbl(off_vals[i], tot_vals[i])})"
               for i in range(2)],
         textposition="inside", insidetextanchor="middle",
-        textfont=dict(color="white", size=17),
+        textfont=dict(color="white", size=14),
     ), secondary_y=False)
 
     fig.add_trace(go.Bar(
@@ -338,7 +338,7 @@ def make_onoff_chart(cur_label, prev_label, cur_on, prev_on,
         text=[f"{on_vals[i]:,.0f} kWh ({pct_lbl(on_vals[i], tot_vals[i])})"
               for i in range(2)],
         textposition="inside", insidetextanchor="middle",
-        textfont=dict(color="white", size=17),
+        textfont=dict(color="white", size=14),
     ), secondary_y=False)
 
     # total annotation on top of bars
@@ -347,7 +347,7 @@ def make_onoff_chart(cur_label, prev_label, cur_on, prev_on,
         fig.add_annotation(
             x=xl, y=tv, text=f"<b>{tv:,.0f} kWh</b>",
             showarrow=False, yshift=10,
-            font=dict(size=18, color="#1a237e"),
+            font=dict(size=15, color="#1a237e"),
         )
 
     # kWh/Ton line on secondary y
@@ -358,31 +358,31 @@ def make_onoff_chart(cur_label, prev_label, cur_on, prev_on,
             name="kWh/Ton", x=x, y=y_kpt,
             mode="lines+markers+text",
             line=dict(color="#f7f12a", width=3),
-            marker=dict(size=10, color="#f7f12a"),
+            marker=dict(size=9, color="#f7f12a"),
             text=[f"{v:,.2f}" if v else "" for v in y_kpt],
             textposition="top center",
-            textfont=dict(size=20, color="#f7f12a"),
+            textfont=dict(size=17, color="#f7f12a"),
         ), secondary_y=True)
 
     fig.update_layout(
         barmode="stack", height=height, showlegend=True,
-        legend=dict(orientation="h", y=1.12, x=1, xanchor="right", font=dict(size=17)),
+        legend=dict(orientation="h", y=1.12, x=1, xanchor="right", font=dict(size=14)),
         margin=dict(t=40, b=30, l=10, r=60),
         plot_bgcolor="white", paper_bgcolor="rgba(0,0,0,0)",
-        font=dict(size=17),
+        font=dict(size=14),
     )
-    fig.update_yaxes(title_text="kWh", title_font=dict(size=18), tickfont=dict(size=16),
+    fig.update_yaxes(title_text="kWh", title_font=dict(size=15), tickfont=dict(size=14),
                      gridcolor="#eee", range=[0, max_tot * 1.22], secondary_y=False)
     if has_kpt:
-        fig.update_yaxes(title_text="kWh/Ton", title_font=dict(size=18), tickfont=dict(size=16),
+        fig.update_yaxes(title_text="kWh/Ton", title_font=dict(size=15), tickfont=dict(size=14),
                          showgrid=False, range=[0, max_kpt * 1.40], secondary_y=True)
-    fig.update_xaxes(gridcolor="#eee", tickfont=dict(size=17))
+    fig.update_xaxes(gridcolor="#eee", tickfont=dict(size=14))
     return fig
 
 
 # ─── Chart: kWh-only bar (non-production, no ton) ─────────────────────────────
 def make_kwh_only_chart(cur_label, prev_label, cur_on, prev_on,
-                        cur_off, prev_off, height=260):
+                        cur_off, prev_off, height=221):
     """Same On/Off stacked style for non-production depts — full width"""
     x        = [f"ก่อนหน้า\n({prev_label})", f"ปัจจุบัน\n({cur_label})"]
     on_vals  = [prev_on,  cur_on]
@@ -399,7 +399,7 @@ def make_kwh_only_chart(cur_label, prev_label, cur_on, prev_on,
         text=[f"{off_vals[i]:,.0f} kWh ({pct_lbl(off_vals[i], tot_vals[i])})"
               for i in range(2)],
         textposition="inside", insidetextanchor="middle",
-        textfont=dict(color="white", size=18),
+        textfont=dict(color="white", size=15),
     ))
     fig.add_trace(go.Bar(
         name="On Peak", x=x, y=on_vals,
@@ -407,24 +407,24 @@ def make_kwh_only_chart(cur_label, prev_label, cur_on, prev_on,
         text=[f"{on_vals[i]:,.0f} kWh ({pct_lbl(on_vals[i], tot_vals[i])})"
               for i in range(2)],
         textposition="inside", insidetextanchor="middle",
-        textfont=dict(color="white", size=18),
+        textfont=dict(color="white", size=15),
     ))
     for i, (xl, tv) in enumerate(zip(x, tot_vals)):
         fig.add_annotation(
             x=xl, y=tv, text=f"<b>{tv:,.0f} kWh</b>",
-            showarrow=False, yshift=10, font=dict(size=18, color="#1a237e"),
+            showarrow=False, yshift=10, font=dict(size=15, color="#1a237e"),
         )
     max_tot = max(tot_vals[0], tot_vals[1], 1)
     fig.update_layout(
         barmode="stack", height=height, showlegend=True,
-        legend=dict(orientation="h", y=1.12, x=1, xanchor="right", font=dict(size=17)),
+        legend=dict(orientation="h", y=1.12, x=1, xanchor="right", font=dict(size=14)),
         margin=dict(t=40, b=30, l=10, r=15),
         plot_bgcolor="white", paper_bgcolor="rgba(0,0,0,0)",
-        font=dict(size=17),
+        font=dict(size=14),
     )
-    fig.update_yaxes(title_text="kWh", title_font=dict(size=18), tickfont=dict(size=16),
+    fig.update_yaxes(title_text="kWh", title_font=dict(size=15), tickfont=dict(size=14),
                      gridcolor="#eee", range=[0, max_tot * 1.22])
-    fig.update_xaxes(gridcolor="#eee", tickfont=dict(size=17))
+    fig.update_xaxes(gridcolor="#eee", tickfont=dict(size=14))
     return fig
 
 
@@ -461,7 +461,7 @@ def render_group(dept_name, bg,
                  cur_label, prev_label, period_name,
                  cur_on, prev_on, cur_off, prev_off,
                  cur_ton, prev_ton,
-                 is_production=True, chart_height=320):
+                 is_production=True, chart_height=272):
 
     cur_kwh  = cur_on  + cur_off
     prev_kwh = prev_on + prev_off
@@ -479,7 +479,7 @@ def render_group(dept_name, bg,
                                    cur_kwh, prev_kwh,
                                    height=chart_height)
             fig_l.update_layout(title_text=f"Ton ผลิต & kWh/Ton — {dept_name}",
-                                 title_font_size=20)
+                                 title_font_size=17)
             st.plotly_chart(fig_l, use_container_width=True)
 
         with col_right:
@@ -489,7 +489,7 @@ def render_group(dept_name, bg,
                                      cur_ton=cur_ton, prev_ton=prev_ton,
                                      height=chart_height)
             fig_r.update_layout(title_text=f"On Peak vs Off Peak — {dept_name}",
-                                 title_font_size=20)
+                                 title_font_size=17)
             st.plotly_chart(fig_r, use_container_width=True)
 
         st.markdown(summary_kpt_html(cur_kwh, prev_kwh, cur_ton, prev_ton, period_name),
@@ -499,8 +499,8 @@ def render_group(dept_name, bg,
         # kWh only — full width On/Off stacked
         fig = make_kwh_only_chart(cur_label, prev_label,
                                   cur_on, prev_on, cur_off, prev_off,
-                                  height=chart_height - 60)
-        fig.update_layout(title_text=f"On Peak vs Off Peak — {dept_name}", title_font_size=20)
+                                  height=chart_height - 51)
+        fig.update_layout(title_text=f"On Peak vs Off Peak — {dept_name}", title_font_size=17)
         st.plotly_chart(fig, use_container_width=True)
         st.markdown(summary_kwh_html(cur_kwh, prev_kwh, period_name), unsafe_allow_html=True)
 
@@ -631,7 +631,7 @@ def render_weekly_page(df, ton):
         dept_name="ทั้งโรงงาน", bg=GROUP_BG[0],
         cur_label=sel_lbl, prev_label=prev_lbl, period_name="สัปดาห์ที่แล้ว",
         cur_on=cur_on, prev_on=prev_on, cur_off=cur_off, prev_off=prev_off,
-        cur_ton=cur_ton, prev_ton=prev_ton, is_production=True, chart_height=340,
+        cur_ton=cur_ton, prev_ton=prev_ton, is_production=True, chart_height=289,
     )
 
     st.markdown("<br>", unsafe_allow_html=True)
@@ -718,9 +718,9 @@ def render_summary_page(df, ton):
     CSS = """
 <style>
 .tbl-wrap{overflow-x:auto}
-table.etbl{border-collapse:collapse;width:100%;font-size:20px;font-family:Arial,sans-serif}
-table.etbl th{background:#1a237e;color:white;padding:8px 12px;text-align:center;border:1px solid #ccc;white-space:nowrap}
-table.etbl td{padding:6px 12px;border:1px solid #ddd;text-align:right;white-space:nowrap}
+table.etbl{border-collapse:collapse;width:100%;font-size:17px;font-family:Arial,sans-serif}
+table.etbl th{background:#1a237e;color:white;padding:7px 10px;text-align:center;border:1px solid #ccc;white-space:nowrap}
+table.etbl td{padding:5px 10px;border:1px solid #ddd;text-align:right;white-space:nowrap}
 table.etbl td.lc{text-align:left;color:#333}
 table.etbl tr.sh td{background:#fff9c4;font-weight:700;color:#1a237e;text-align:left;border-top:2px solid #1a237e}
 table.etbl tr.fr td{background:#f5f5f5;font-weight:600}
