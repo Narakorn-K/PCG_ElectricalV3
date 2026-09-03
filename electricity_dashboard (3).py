@@ -258,9 +258,29 @@ def dept_agg(data, period_col, period_val):
     return g.sort_values("total", ascending=False)
 
 
+def centered_range(vals):
+    """Return an axis [lo, hi] range that places the data's own min/max
+    around the vertical middle of the plot instead of hugging the top
+    (as happens when the range always starts at 0)."""
+    vals = [v for v in vals if v]
+    if not vals:
+        return [0, 1]
+    lo, hi = min(vals), max(vals)
+    center = (lo + hi) / 2
+    span   = hi - lo
+    pad    = max(span, center * 0.08) * 2.5
+    lo_out = center - pad
+    hi_out = center + pad
+    if lo_out < 0:
+        # shift up so the axis doesn't go negative, keep data roughly centered
+        hi_out -= lo_out
+        lo_out = 0
+    return [lo_out, hi_out]
+
+
 # ─── Chart: LEFT — Ton bar + kWh/Ton line (50%) ───────────────────────────────
 def make_kpt_chart(cur_label, prev_label, cur_ton, prev_ton,
-                   cur_kwh, prev_kwh, height=272):
+                   cur_kwh, prev_kwh, height=408):
     cur_kpt  = cur_kwh  / cur_ton  if cur_ton  > 0 else 0.0
     prev_kpt = prev_kwh / prev_ton if prev_ton > 0 else 0.0
     x = [f"ก่อนหน้า\n({prev_label})", f"ปัจจุบัน\n({cur_label})"]
@@ -287,7 +307,7 @@ def make_kpt_chart(cur_label, prev_label, cur_ton, prev_ton,
         ), secondary_y=True)
 
     max_ton = max(prev_ton, cur_ton, 1)
-    max_kpt = max(prev_kpt, cur_kpt, 1)
+    kpt_range = centered_range([prev_kpt, cur_kpt])
     fig.update_layout(
         height=height, barmode="group", showlegend=True,
         legend=dict(orientation="h", y=1.12, x=1, xanchor="right", font=dict(size=14)),
@@ -298,7 +318,7 @@ def make_kpt_chart(cur_label, prev_label, cur_ton, prev_ton,
     fig.update_yaxes(title_text="Ton", title_font=dict(size=15), tickfont=dict(size=14),
                      gridcolor="#eee", range=[0, max_ton * 1.28], secondary_y=False)
     fig.update_yaxes(title_text="kWh/Ton", title_font=dict(size=15), tickfont=dict(size=14),
-                     showgrid=False, range=[0, max_kpt * 1.40], secondary_y=True)
+                     showgrid=False, range=kpt_range, secondary_y=True)
     fig.update_xaxes(gridcolor="#eee", tickfont=dict(size=14))
     return fig
 
@@ -307,7 +327,7 @@ def make_kpt_chart(cur_label, prev_label, cur_ton, prev_ton,
 def make_onoff_chart(cur_label, prev_label, cur_on, prev_on,
                      cur_off, prev_off,
                      cur_ton=0.0, prev_ton=0.0,
-                     height=272):
+                     height=408):
     x        = [f"ก่อนหน้า\n({prev_label})", f"ปัจจุบัน\n({cur_label})"]
     on_vals  = [prev_on,  cur_on]
     off_vals = [prev_off, cur_off]
@@ -353,7 +373,7 @@ def make_onoff_chart(cur_label, prev_label, cur_on, prev_on,
     # kWh/Ton line on secondary y
     if has_kpt:
         y_kpt = [v if v is not None else 0 for v in kpt_vals]
-        max_kpt = max(v for v in y_kpt if v)
+        kpt_range = centered_range(y_kpt)
         fig.add_trace(go.Scatter(
             name="kWh/Ton", x=x, y=y_kpt,
             mode="lines+markers+text",
@@ -375,14 +395,14 @@ def make_onoff_chart(cur_label, prev_label, cur_on, prev_on,
                      gridcolor="#eee", range=[0, max_tot * 1.22], secondary_y=False)
     if has_kpt:
         fig.update_yaxes(title_text="kWh/Ton", title_font=dict(size=15), tickfont=dict(size=14),
-                         showgrid=False, range=[0, max_kpt * 1.40], secondary_y=True)
+                         showgrid=False, range=kpt_range, secondary_y=True)
     fig.update_xaxes(gridcolor="#eee", tickfont=dict(size=14))
     return fig
 
 
 # ─── Chart: kWh-only bar (non-production, no ton) ─────────────────────────────
 def make_kwh_only_chart(cur_label, prev_label, cur_on, prev_on,
-                        cur_off, prev_off, height=221):
+                        cur_off, prev_off, height=332):
     """Same On/Off stacked style for non-production depts — full width"""
     x        = [f"ก่อนหน้า\n({prev_label})", f"ปัจจุบัน\n({cur_label})"]
     on_vals  = [prev_on,  cur_on]
@@ -461,7 +481,7 @@ def render_group(dept_name, bg,
                  cur_label, prev_label, period_name,
                  cur_on, prev_on, cur_off, prev_off,
                  cur_ton, prev_ton,
-                 is_production=True, chart_height=272):
+                 is_production=True, chart_height=408):
 
     cur_kwh  = cur_on  + cur_off
     prev_kwh = prev_on + prev_off
@@ -499,7 +519,7 @@ def render_group(dept_name, bg,
         # kWh only — full width On/Off stacked
         fig = make_kwh_only_chart(cur_label, prev_label,
                                   cur_on, prev_on, cur_off, prev_off,
-                                  height=chart_height - 51)
+                                  height=chart_height - 77)
         fig.update_layout(title_text=f"On Peak vs Off Peak — {dept_name}", title_font_size=17)
         st.plotly_chart(fig, use_container_width=True)
         st.markdown(summary_kwh_html(cur_kwh, prev_kwh, period_name), unsafe_allow_html=True)
@@ -631,7 +651,7 @@ def render_weekly_page(df, ton):
         dept_name="ทั้งโรงงาน", bg=GROUP_BG[0],
         cur_label=sel_lbl, prev_label=prev_lbl, period_name="สัปดาห์ที่แล้ว",
         cur_on=cur_on, prev_on=prev_on, cur_off=cur_off, prev_off=prev_off,
-        cur_ton=cur_ton, prev_ton=prev_ton, is_production=True, chart_height=289,
+        cur_ton=cur_ton, prev_ton=prev_ton, is_production=True, chart_height=434,
     )
 
     st.markdown("<br>", unsafe_allow_html=True)
