@@ -259,23 +259,21 @@ def dept_agg(data, period_col, period_val):
 
 
 def centered_range(vals):
-    """Return an axis [lo, hi] range that places the data's own min/max
-    around the vertical middle of the plot instead of hugging the top
-    (as happens when the range always starts at 0)."""
+    """Axis always starts at 0 (fixed baseline), but the upper bound is
+    chosen so the data's own min/max band sits around the vertical middle
+    of the plot instead of hugging the top."""
     vals = [v for v in vals if v]
     if not vals:
         return [0, 1]
     lo, hi = min(vals), max(vals)
     center = (lo + hi) / 2
     span   = hi - lo
-    pad    = max(span, center * 0.08) * 2.5
-    lo_out = center - pad
-    hi_out = center + pad
-    if lo_out < 0:
-        # shift up so the axis doesn't go negative, keep data roughly centered
-        hi_out -= lo_out
-        lo_out = 0
-    return [lo_out, hi_out]
+    pad    = max(span, center * 0.1) * 1.5
+    # put the data's center at the vertical midpoint of [0, axis_max]
+    axis_max = center * 2
+    # make sure the highest point (plus a little breathing room) still fits
+    axis_max = max(axis_max, hi + pad)
+    return [0, axis_max]
 
 
 # ─── Chart: LEFT — Ton bar + kWh/Ton line (50%) ───────────────────────────────
